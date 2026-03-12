@@ -56,11 +56,23 @@
 
           packages = {
             default = py.dagster;
-            inherit (py) dagster;
-            inherit (py) dagster-pipes;
-            inherit (py) dagster-shared;
-            inherit (py) dagster-graphql;
-            inherit (py) dagster-webserver;
+            inherit (py)
+              dagster
+              dagster-pipes
+              dagster-shared
+              dagster-graphql
+              dagster-webserver
+              ;
+          };
+
+          checks = {
+            inherit (py)
+              dagster
+              dagster-pipes
+              dagster-shared
+              dagster-graphql
+              dagster-webserver
+              ;
           };
         };
     };

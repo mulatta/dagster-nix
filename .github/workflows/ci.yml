@@ -10,13 +10,10 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v6
       - name: Setup Nix
-        uses: cachix/install-nix-action@v31
-      - name: Check formatting
-        run: nix build .#checks.x86_64-linux.treefmt --no-link
-      - name: Build all packages
-        run: |
-          nix build .#packages.x86_64-linux.dagster-pipes --no-link
-          nix build .#packages.x86_64-linux.dagster-shared --no-link
-          nix build .#packages.x86_64-linux.dagster --no-link
-          nix build .#packages.x86_64-linux.dagster-graphql --no-link
-          nix build .#packages.x86_64-linux.dagster-webserver --no-link
+        uses: NixOS/nix-installer-action@main
+        with:
+          extra-conf: |
+            extra-substituters = https://nix-community.cachix.org https://cache.mulatta.io
+            extra-trusted-public-keys = nix-community.cachix.org-1:mB9FSh9qf2dCimDSUo8Zy7bkq5CX+/rkCWyvRCYg3Fs= cache.mulatta.io-1:DrV+Oy2azNyVKM7ihhD1QoOetRUnW+1G6RWToUpSO4U=
+      - name: Run all checks (formatting + package builds)
+        run: nix flake check
