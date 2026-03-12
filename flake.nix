@@ -1,5 +1,5 @@
 {
-  description = "dagster-nix";
+  description = "Dagster packages for Nix";
 
   inputs = {
     # keep-sorted start
@@ -21,12 +21,29 @@
         ./nix/shell.nix
       ];
 
+      flake = {
+        overlays.default = import ./overlay.nix;
+      };
+
       perSystem =
         { system, ... }:
-        {
-          _module.args.pkgs = import inputs.nixpkgs {
+        let
+          pkgs = import inputs.nixpkgs {
             inherit system;
-            config.allowUnfree = true;
+            overlays = [ (import ./overlay.nix) ];
+          };
+          py = pkgs.python313Packages;
+        in
+        {
+          _module.args.pkgs = pkgs;
+
+          packages = {
+            default = py.dagster;
+            inherit (py) dagster;
+            inherit (py) dagster-pipes;
+            inherit (py) dagster-shared;
+            inherit (py) dagster-graphql;
+            inherit (py) dagster-webserver;
           };
         };
     };
