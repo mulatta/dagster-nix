@@ -38,6 +38,8 @@
 
       flake = {
         overlays.default = dagsterOverlay;
+        nixosModules.default = ./modules/nixos.nix;
+        darwinModules.default = ./modules/darwin.nix;
       };
 
       perSystem =
