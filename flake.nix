@@ -62,8 +62,14 @@
           _module.args.pkgs = pkgs;
 
           packages = {
-            default = mkDagsterApp "dagster" [ py.dagster ];
-            dagster = mkDagsterApp "dagster" [ py.dagster ];
+            default = mkDagsterApp "dagster" [
+              py.dagster
+              py.dagster-webserver
+            ];
+            dagster = mkDagsterApp "dagster" [
+              py.dagster
+              py.dagster-webserver
+            ];
             dagster-webserver = mkDagsterApp "dagster-webserver" [ py.dagster-webserver ];
           };
 

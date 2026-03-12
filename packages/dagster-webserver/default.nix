@@ -8,6 +8,7 @@
   dagster-graphql,
   starlette,
   uvicorn,
+  websockets,
 }:
 
 buildPythonPackage (finalAttrs: {
@@ -29,6 +30,7 @@ buildPythonPackage (finalAttrs: {
     dagster-graphql
     starlette
     uvicorn
+    websockets
   ];
 
   doCheck = false;
