@@ -50,19 +50,21 @@
             overlays = [ dagsterOverlay ];
           };
           py = pkgs.python313Packages;
+
+          # Runnable apps with proper sys.executable via withPackages
+          mkDagsterApp =
+            mainProgram: deps:
+            (pkgs.python313.withPackages (_ps: deps)).overrideAttrs {
+              meta.mainProgram = mainProgram;
+            };
         in
         {
           _module.args.pkgs = pkgs;
 
           packages = {
-            default = py.dagster;
-            inherit (py)
-              dagster
-              dagster-pipes
-              dagster-shared
-              dagster-graphql
-              dagster-webserver
-              ;
+            default = mkDagsterApp "dagster" [ py.dagster ];
+            dagster = mkDagsterApp "dagster" [ py.dagster ];
+            dagster-webserver = mkDagsterApp "dagster-webserver" [ py.dagster-webserver ];
           };
 
           checks = {
