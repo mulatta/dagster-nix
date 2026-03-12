@@ -1,0 +1,22 @@
+name: CI
+on:
+  pull_request:
+  push:
+    branches: [main]
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+      - name: Setup Nix
+        uses: cachix/install-nix-action@v31
+      - name: Check formatting
+        run: nix build .#checks.x86_64-linux.treefmt --no-link
+      - name: Build all packages
+        run: |
+          nix build .#packages.x86_64-linux.dagster-pipes --no-link
+          nix build .#packages.x86_64-linux.dagster-shared --no-link
+          nix build .#packages.x86_64-linux.dagster --no-link
+          nix build .#packages.x86_64-linux.dagster-graphql --no-link
+          nix build .#packages.x86_64-linux.dagster-webserver --no-link
