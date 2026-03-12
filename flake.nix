@@ -25,8 +25,8 @@
       };
 
       dagsterOverlay = _final: prev: {
-        python3Packages = prev.python3Packages.override { inherit overrides; };
-        python313Packages = prev.python313Packages.override { inherit overrides; };
+        python3 = prev.python3.override { packageOverrides = overrides; };
+        python313 = prev.python313.override { packageOverrides = overrides; };
       };
     in
     flake-parts.lib.mkFlake { inherit inputs; } {
