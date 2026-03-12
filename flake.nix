@@ -22,6 +22,7 @@
         dagster = python-final.callPackage ./packages/dagster { };
         dagster-graphql = python-final.callPackage ./packages/dagster-graphql { };
         dagster-webserver = python-final.callPackage ./packages/dagster-webserver { };
+        dagster-duckdb = python-final.callPackage ./packages/dagster-duckdb { };
       };
 
       dagsterOverlay = _final: prev: {
@@ -80,6 +81,7 @@
               dagster-shared
               dagster-graphql
               dagster-webserver
+              dagster-duckdb
               ;
           };
         };
