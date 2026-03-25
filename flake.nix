@@ -83,6 +83,7 @@
               );
 
           venv = (pythonSet.mkVirtualEnv "dagster-env" workspace.deps.default).overrideAttrs {
+            meta.mainProgram = "dagster";
             passthru.dagsterVersion = pythonSet.dagster.version;
           };
         in
@@ -94,6 +95,12 @@
 
           checks = {
             dagster = venv;
+          }
+          // pkgs.lib.optionalAttrs pkgs.stdenv.hostPlatform.isLinux {
+            vmtest = import ./tests/vmtest.nix {
+              inherit pkgs;
+              dagsterPackage = venv;
+            };
           };
         };
     };

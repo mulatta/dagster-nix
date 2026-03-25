@@ -1,4 +1,7 @@
-{ lib, ... }:
+{ config, lib, ... }:
+let
+  cfg = config.services.dagster;
+in
 {
   options.services.dagster = {
     enable = lib.mkEnableOption "Dagster orchestration platform";
@@ -69,7 +72,8 @@
             runLauncher = lib.mkOption {
               type = lib.types.attrs;
               default = {
-                module = "dagster.core.launcher.DefaultRunLauncher";
+                module = "dagster._core.launcher.default_run_launcher";
+                class = "DefaultRunLauncher";
                 config = { };
               };
               description = "Run launcher configuration for dagster.yaml.";
@@ -213,6 +217,8 @@
           options = {
             package = lib.mkOption {
               type = lib.types.package;
+              default = cfg.package;
+              defaultText = lib.literalExpression "config.services.dagster.package";
               description = "The dagster package for this code server. Defaults to the top-level dagster package.";
             };
 
