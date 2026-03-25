@@ -26,6 +26,7 @@ let
 
   hasWorkspace = cfg.workspace != null;
   hasWorkspaceFile = cfg.workspaceFile != null;
+  needsWorkspace = cfg.webserver.enable || cfg.daemon.enable;
 in
 {
   codeServerAssertions = lib.mapAttrsToList (name: cs: {
@@ -39,8 +40,8 @@ in
       message = "services.dagster: workspace and workspaceFile are mutually exclusive.";
     }
     {
-      assertion = hasWorkspace || hasWorkspaceFile;
-      message = "services.dagster: either workspace or workspaceFile must be set.";
+      assertion = !needsWorkspace || hasWorkspace || hasWorkspaceFile;
+      message = "services.dagster: either workspace or workspaceFile must be set when webserver or daemon is enabled.";
     }
     {
       assertion =
@@ -61,11 +62,13 @@ in
         "-w"
         (toString cfg.workspaceFile)
       ]
-    else
+    else if hasWorkspace then
       [
         "-w"
         (toString workspaceFile)
-      ];
+      ]
+    else
+      [ ];
 
   # Build command-line args for a code server instance
   codeServerArgs =

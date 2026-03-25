@@ -7,12 +7,40 @@
 let
   cfg = config.services.dagster;
   ws = import ./workspace.nix { inherit cfg lib pkgs; };
+  dy = import ./dagster-yaml.nix { inherit cfg lib pkgs; };
+
+  commonServiceConfig = {
+    User = "dagster";
+    Group = "dagster";
+    WorkingDirectory = cfg.workspaceDir;
+    Restart = "on-failure";
+    RestartSec = 5;
+
+    # Hardening
+    NoNewPrivileges = true;
+    ProtectSystem = "strict";
+    ProtectHome = true;
+    ReadWritePaths = [ cfg.workspaceDir ];
+    PrivateTmp = true;
+  }
+  // lib.optionalAttrs (cfg.environmentFile != null) {
+    EnvironmentFile = cfg.environmentFile;
+  };
+
+  commonEnvironment = {
+    DAGSTER_HOME = cfg.workspaceDir;
+  }
+  // lib.optionalAttrs dy.hasPg {
+    DAGSTER_PG_URL = dy.postgresUrl;
+  };
+
+  codeServerNames = lib.mapAttrsToList (name: _: "dagster-code-${name}.service") cfg.codeServers;
 in
 {
   imports = [ ./options.nix ];
 
   config = lib.mkIf cfg.enable {
-    inherit (ws) assertions;
+    assertions = ws.assertions ++ dy.assertions;
 
     users.users.dagster = {
       isSystemUser = true;
@@ -22,68 +50,68 @@ in
     };
     users.groups.dagster = { };
 
-    systemd.services = {
-      dagster-webserver = {
-        description = "Dagster Webserver";
-        after = [
-          "network.target"
-        ]
-        ++ lib.mapAttrsToList (name: _: "dagster-code-${name}.service") cfg.codeServers;
-        wantedBy = [ "multi-user.target" ];
+    # Symlink dagster.yaml into DAGSTER_HOME
+    systemd.tmpfiles.rules = [
+      "L+ ${cfg.workspaceDir}/dagster.yaml - - - - ${dy.configFile}"
+    ];
 
-        environment.DAGSTER_HOME = cfg.workspaceDir;
+    systemd.services =
+      # Webserver
+      lib.optionalAttrs cfg.webserver.enable {
+        dagster-webserver = {
+          description = "Dagster Webserver";
+          after = [ "network.target" ] ++ codeServerNames;
+          wantedBy = [ "multi-user.target" ];
+          environment = commonEnvironment;
 
-        serviceConfig = {
-          ExecStart = lib.concatStringsSep " " (
-            [
-              (lib.getExe cfg.package)
-              "--host"
-              cfg.host
-              "--port"
-              (toString cfg.port)
-            ]
-            ++ ws.workspaceArgs
-            ++ cfg.extraArgs
-          );
-          User = "dagster";
-          Group = "dagster";
-          WorkingDirectory = cfg.workspaceDir;
-          Restart = "on-failure";
-          RestartSec = 5;
-
-          # Hardening
-          NoNewPrivileges = true;
-          ProtectSystem = "strict";
-          ProtectHome = true;
-          ReadWritePaths = [ cfg.workspaceDir ];
-          PrivateTmp = true;
-        };
-      };
-    }
-    // lib.mapAttrs' (
-      name: cs:
-      lib.nameValuePair "dagster-code-${name}" {
-        description = "Dagster Code Server (${name})";
-        after = [ "network.target" ];
-        wantedBy = [ "multi-user.target" ];
-
-        environment.DAGSTER_HOME = cfg.workspaceDir;
-
-        serviceConfig = {
-          ExecStart = lib.concatStringsSep " " (ws.codeServerArgs name cs);
-          User = "dagster";
-          Group = "dagster";
-          WorkingDirectory = cfg.workspaceDir;
-          Restart = "on-failure";
-          RestartSec = 5;
-
-          NoNewPrivileges = true;
-          ProtectSystem = "strict";
-          ProtectHome = true;
-          ReadWritePaths = [ cfg.workspaceDir ];
-          PrivateTmp = true;
+          serviceConfig = commonServiceConfig // {
+            ExecStart = lib.concatStringsSep " " (
+              [
+                (lib.getExe cfg.webserver.package)
+                "--host"
+                cfg.webserver.host
+                "--port"
+                (toString cfg.webserver.port)
+              ]
+              ++ ws.workspaceArgs
+              ++ cfg.webserver.extraArgs
+            );
+          };
         };
       }
-    ) cfg.codeServers;
+      # Daemon
+      // lib.optionalAttrs cfg.daemon.enable {
+        dagster-daemon = {
+          description = "Dagster Daemon";
+          after = [ "network.target" ] ++ codeServerNames;
+          wantedBy = [ "multi-user.target" ];
+          environment = commonEnvironment;
+
+          serviceConfig = commonServiceConfig // {
+            ExecStart = lib.concatStringsSep " " (
+              [
+                "${lib.getBin cfg.package}/bin/dagster-daemon"
+                "run"
+              ]
+              ++ ws.workspaceArgs
+              ++ cfg.daemon.extraArgs
+            );
+          };
+        };
+      }
+      # Code servers
+      // lib.mapAttrs' (
+        name: cs:
+        lib.nameValuePair "dagster-code-${name}" {
+          description = "Dagster Code Server (${name})";
+          after = [ "network.target" ];
+          wantedBy = [ "multi-user.target" ];
+          environment = commonEnvironment;
+
+          serviceConfig = commonServiceConfig // {
+            ExecStart = lib.concatStringsSep " " (ws.codeServerArgs name cs);
+          };
+        }
+      ) cfg.codeServers;
   };
 }
