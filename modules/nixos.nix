@@ -63,7 +63,29 @@ in
       package = lib.mkDefault cfg.package;
     }) cfg.codeServers;
 
-    assertions = ws.assertions ++ dy.assertions ++ versionAssertions;
+    assertions =
+      ws.assertions
+      ++ dy.assertions
+      ++ versionAssertions
+      ++ [
+        {
+          assertion =
+            !(dy.hasPg && cfg.settings.storage.postgres.createLocally)
+            || cfg.settings.storage.postgres.database == cfg.settings.storage.postgres.user;
+          message = "services.dagster: when createLocally is true, database name and user must match (PostgreSQL ensureDBOwnership constraint).";
+        }
+      ];
+
+    services.postgresql = lib.mkIf (dy.hasPg && cfg.settings.storage.postgres.createLocally) {
+      enable = true;
+      ensureDatabases = [ cfg.settings.storage.postgres.database ];
+      ensureUsers = [
+        {
+          name = cfg.settings.storage.postgres.user;
+          ensureDBOwnership = true;
+        }
+      ];
+    };
 
     users.users.dagster = {
       isSystemUser = true;

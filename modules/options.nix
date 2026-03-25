@@ -32,6 +32,9 @@
               type = lib.types.nullOr (
                 lib.types.submodule {
                   options = {
+                    createLocally = lib.mkEnableOption "automatic local PostgreSQL database and user creation" // {
+                      default = true;
+                    };
                     host = lib.mkOption {
                       type = lib.types.str;
                       default = "/run/postgresql";

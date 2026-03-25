@@ -7,9 +7,13 @@
 let
   cfg = config.services.dagster;
   ws = import ./workspace.nix { inherit cfg lib pkgs; };
+  dy = import ./dagster-yaml.nix { inherit cfg lib pkgs; };
 
   commonEnv = {
     DAGSTER_HOME = cfg.workspaceDir;
+  }
+  // lib.optionalAttrs dy.hasPg {
+    DAGSTER_PG_URL = dy.postgresUrl;
   };
 in
 {
@@ -21,7 +25,21 @@ in
       package = lib.mkDefault cfg.package;
     }) cfg.codeServers;
 
-    inherit (ws) assertions;
+    assertions = ws.assertions ++ dy.assertions;
+
+    warnings = lib.optionals (dy.hasPg && cfg.settings.storage.postgres.createLocally) [
+      "services.dagster: nix-darwin does not support ensureDatabases/ensureUsers. You must manually create the '${cfg.settings.storage.postgres.database}' database and '${cfg.settings.storage.postgres.user}' user."
+    ];
+
+    services.postgresql = lib.mkIf (dy.hasPg && cfg.settings.storage.postgres.createLocally) {
+      enable = true;
+    };
+
+    # Ensure DAGSTER_HOME exists and symlink dagster.yaml
+    system.activationScripts.postActivation.text = ''
+      mkdir -p ${cfg.workspaceDir}
+      ln -sfn ${dy.configFile} ${cfg.workspaceDir}/dagster.yaml
+    '';
 
     launchd.daemons =
       # Webserver
