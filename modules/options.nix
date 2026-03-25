@@ -1,33 +1,153 @@
 { lib, pkgs, ... }:
 {
   options.services.dagster = {
-    enable = lib.mkEnableOption "Dagster webserver";
+    enable = lib.mkEnableOption "Dagster orchestration platform";
 
     package = lib.mkOption {
       type = lib.types.package;
-      default = pkgs.python313Packages.dagster-webserver;
-      defaultText = lib.literalExpression "pkgs.python313Packages.dagster-webserver";
-      description = "The dagster-webserver package to use.";
-    };
-
-    host = lib.mkOption {
-      type = lib.types.str;
-      default = "127.0.0.1";
-      description = "Host to bind the webserver to.";
-    };
-
-    port = lib.mkOption {
-      type = lib.types.port;
-      default = 3000;
-      description = "Port for the dagster webserver.";
+      default = pkgs.python313Packages.dagster;
+      defaultText = lib.literalExpression "pkgs.python313Packages.dagster";
+      description = "The dagster package to use for daemon and code servers.";
     };
 
     workspaceDir = lib.mkOption {
       type = lib.types.path;
       default = "/var/lib/dagster";
-      description = "Dagster home directory for storage and workspace config.";
+      description = "Dagster home directory (DAGSTER_HOME) for storage and runtime data.";
     };
 
+    # dagster.yaml — bring-your-own or generated from settings
+    settingsFile = lib.mkOption {
+      type = lib.types.nullOr lib.types.path;
+      default = null;
+      description = ''
+        Path to a dagster.yaml file. Mutually exclusive with settings.
+        When set, this file is symlinked into workspaceDir as dagster.yaml.
+      '';
+    };
+
+    settings = lib.mkOption {
+      type = lib.types.nullOr (
+        lib.types.submodule {
+          options = {
+            storage.postgres = lib.mkOption {
+              type = lib.types.nullOr (
+                lib.types.submodule {
+                  options = {
+                    host = lib.mkOption {
+                      type = lib.types.str;
+                      default = "/run/postgresql";
+                      description = "PostgreSQL host or Unix socket directory.";
+                    };
+                    database = lib.mkOption {
+                      type = lib.types.str;
+                      default = "dagster";
+                      description = "PostgreSQL database name.";
+                    };
+                    user = lib.mkOption {
+                      type = lib.types.str;
+                      default = "dagster";
+                      description = "PostgreSQL user.";
+                    };
+                  };
+                }
+              );
+              default = { };
+              description = ''
+                PostgreSQL storage configuration. Enabled by default for production use.
+                Set to null to fall back to SQLite (not recommended for production).
+              '';
+            };
+
+            telemetry.enabled = lib.mkOption {
+              type = lib.types.bool;
+              default = false;
+              description = "Whether to enable Dagster telemetry.";
+            };
+
+            runLauncher = lib.mkOption {
+              type = lib.types.attrs;
+              default = {
+                module = "dagster.core.launcher.DefaultRunLauncher";
+                config = { };
+              };
+              description = "Run launcher configuration for dagster.yaml.";
+            };
+
+            retention = lib.mkOption {
+              type = lib.types.nullOr lib.types.attrs;
+              default = null;
+              description = "Retention/purge configuration for dagster.yaml.";
+            };
+
+            extraConfig = lib.mkOption {
+              type = lib.types.attrs;
+              default = { };
+              description = ''
+                Extra configuration merged into dagster.yaml.
+                Useful for compute_logs, run_monitoring, etc.
+              '';
+            };
+          };
+        }
+      );
+      default = { };
+      description = ''
+        Declarative dagster.yaml configuration. Mutually exclusive with settingsFile.
+        When null, no dagster.yaml is generated (use settingsFile instead).
+      '';
+    };
+
+    # webserver
+    webserver = {
+      enable = lib.mkOption {
+        type = lib.types.bool;
+        default = true;
+        description = "Whether to enable the Dagster webserver (UI + GraphQL API).";
+      };
+
+      package = lib.mkOption {
+        type = lib.types.package;
+        default = pkgs.python313Packages.dagster-webserver;
+        defaultText = lib.literalExpression "pkgs.python313Packages.dagster-webserver";
+        description = "The dagster-webserver package to use.";
+      };
+
+      host = lib.mkOption {
+        type = lib.types.str;
+        default = "127.0.0.1";
+        description = "Host to bind the webserver to.";
+      };
+
+      port = lib.mkOption {
+        type = lib.types.port;
+        default = 3000;
+        description = "Port for the dagster webserver.";
+      };
+
+      extraArgs = lib.mkOption {
+        type = lib.types.listOf lib.types.str;
+        default = [ ];
+        description = "Extra arguments passed to dagster-webserver.";
+      };
+    };
+
+    # daemon
+    daemon = {
+      enable = lib.mkOption {
+        type = lib.types.bool;
+        default = true;
+        description = "Whether to enable the Dagster daemon (schedules, sensors, backfills).";
+      };
+
+      extraArgs = lib.mkOption {
+        type = lib.types.listOf lib.types.str;
+        default = [ ];
+        description = "Extra arguments passed to dagster-daemon run.";
+      };
+    };
+
+    # workspace
     workspace = lib.mkOption {
       type = lib.types.nullOr (
         lib.types.submodule {
@@ -35,7 +155,7 @@
             pythonModules = lib.mkOption {
               type = lib.types.listOf lib.types.str;
               default = [ ];
-              description = "Python modules to load as code locations (e.g. [\"my_project.definitions\"]).";
+              description = "Python modules to load as code locations.";
             };
 
             pythonFiles = lib.mkOption {
@@ -73,8 +193,7 @@
       );
       default = null;
       description = ''
-        Declarative workspace configuration. Generates a workspace.yaml
-        and passes it via -w to dagster-webserver.
+        Declarative workspace configuration. Generates a workspace.yaml.
         Cannot be used together with workspaceFile.
       '';
     };
@@ -88,12 +207,7 @@
       '';
     };
 
-    extraArgs = lib.mkOption {
-      type = lib.types.listOf lib.types.str;
-      default = [ ];
-      description = "Extra arguments passed to dagster-webserver.";
-    };
-
+    # code servers
     codeServers = lib.mkOption {
       type = lib.types.attrsOf (
         lib.types.submodule {
@@ -153,6 +267,13 @@
         Named code server instances. Each entry creates a separate
         dagster code-server process serving one code location via gRPC.
       '';
+    };
+
+    # secrets
+    environmentFile = lib.mkOption {
+      type = lib.types.nullOr lib.types.path;
+      default = null;
+      description = "File containing environment variables loaded by all dagster services.";
     };
   };
 }
