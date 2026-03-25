@@ -9,6 +9,8 @@ let
   pg = if hasSettings then cfg.settings.storage.postgres else null;
   hasPg = pg != null;
 
+  settingsFormat = pkgs.formats.yaml { };
+
   generatedConfig =
     let
       storageConfig =
@@ -37,7 +39,7 @@ let
     in
     lib.recursiveUpdate base cfg.settings.extraConfig;
 
-  dagsterYaml = pkgs.writeText "dagster.yaml" (builtins.toJSON generatedConfig);
+  dagsterYaml = settingsFormat.generate "dagster.yaml" generatedConfig;
 in
 {
   assertions = [
@@ -47,10 +49,8 @@ in
     }
   ];
 
-  # The dagster.yaml file path to symlink into workspaceDir
   configFile = if hasSettingsFile then cfg.settingsFile else dagsterYaml;
 
-  # PostgreSQL connection URL for environment variable
   postgresUrl = lib.optionalString hasPg "postgresql://${pg.user}@/${pg.database}?host=${pg.host}";
 
   inherit hasPg;

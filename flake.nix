@@ -42,19 +42,33 @@
         ./nix/shell.nix
       ];
 
-      flake = {
-        nixosModules.default = ./modules/nixos.nix;
-        darwinModules.default = ./modules/darwin.nix;
-      };
+      flake =
+        { withSystem, ... }:
+        {
+          nixosModules.default =
+            { pkgs, ... }:
+            {
+              imports = [ ./modules/nixos.nix ];
+              services.dagster.package = pkgs.lib.mkDefault (
+                withSystem pkgs.stdenv.hostPlatform.system ({ config, ... }: config.packages.dagster)
+              );
+            };
+          darwinModules.default =
+            { pkgs, ... }:
+            {
+              imports = [ ./modules/darwin.nix ];
+              services.dagster.package = pkgs.lib.mkDefault (
+                withSystem pkgs.stdenv.hostPlatform.system ({ config, ... }: config.packages.dagster)
+              );
+            };
+        };
 
       perSystem =
         { pkgs, ... }:
         let
           python = pkgs.python313;
 
-          pyprojectOverrides = _final: _prev: {
-            # Add build fixups here as needed
-          };
+          pyprojectOverrides = import ./nix/python-overrides.nix;
 
           pythonSet =
             (pkgs.callPackage inputs.pyproject-nix.build.packages {
@@ -68,7 +82,9 @@
                 ]
               );
 
-          venv = pythonSet.mkVirtualEnv "dagster-env" workspace.deps.default;
+          venv = (pythonSet.mkVirtualEnv "dagster-env" workspace.deps.default).overrideAttrs {
+            passthru.dagsterVersion = pythonSet.dagster.version;
+          };
         in
         {
           packages = {
