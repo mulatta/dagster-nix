@@ -57,6 +57,7 @@
           mkDagsterApp =
             mainProgram: deps:
             (pkgs.python313.withPackages (_ps: deps)).overrideAttrs {
+              inherit (builtins.head deps) version;
               meta.mainProgram = mainProgram;
             };
         in

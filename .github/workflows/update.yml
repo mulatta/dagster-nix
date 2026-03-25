@@ -3,26 +3,118 @@ on:
   schedule:
     - cron: "0 18 * * *" # Daily at 3 AM KST
   workflow_dispatch:
-    inputs:
-      packages:
-        description: 'Specific packages to update (space-separated, empty for all)'
-        required: false
-        default: ''
-      inputs:
-        description: 'Specific flake inputs to update (space-separated, empty for all)'
-        required: false
-        default: ''
 jobs:
-  update:
-    uses: ./.github/workflows/update-flake.yml
-    with:
-      packages: ${{ github.event.inputs.packages }}
-      inputs: ${{ github.event.inputs.inputs }}
-      pr-labels: 'dependencies,automated'
-      auto-merge: true
-    secrets:
-      APP_ID: ${{ secrets.APP_ID }}
-      APP_PRIVATE_KEY: ${{ secrets.APP_PRIVATE_KEY }}
+  update-packages:
+    runs-on: ubuntu-latest
     permissions:
       contents: write
       pull-requests: write
+    steps:
+      - name: Generate GitHub App Token
+        id: app-token
+        uses: actions/create-github-app-token@v2
+        with:
+          app-id: ${{ secrets.APP_ID }}
+          private-key: ${{ secrets.APP_PRIVATE_KEY }}
+      - uses: actions/checkout@v6
+        with:
+          token: ${{ steps.app-token.outputs.token }}
+      - uses: NixOS/nix-installer-action@main
+        with:
+          extra-conf: |
+            extra-substituters = https://nix-community.cachix.org https://cache.mulatta.io
+            extra-trusted-public-keys = nix-community.cachix.org-1:mB9FSh9qf2dCimDSUo8Zy7bkq5CX+/rkCWyvRCYg3Fs= cache.mulatta.io-1:DrV+Oy2azNyVKM7ihhD1QoOetRUnW+1G6RWToUpSO4U=
+      - name: Update uv.lock
+        run: nix develop -c uv lock --upgrade
+      - name: Check for changes
+        id: check
+        run: |
+          if git diff --quiet uv.lock; then
+            echo "updated=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "updated=true" >> "$GITHUB_OUTPUT"
+            # Extract dagster version from uv.lock
+            version=$(grep -A1 '^name = "dagster"$' uv.lock | grep '^version' | head -1 | sed 's/version = "\(.*\)"/\1/')
+            echo "version=$version" >> "$GITHUB_OUTPUT"
+          fi
+      - name: Create pull request
+        if: steps.check.outputs.updated == 'true'
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add uv.lock
+          git checkout -b update/dagster
+          git commit -m "dagster: update to ${{ steps.check.outputs.version }}" --signoff
+          git push --force origin update/dagster
+          existing=$(gh pr list --head update/dagster --json number --jq '.[0].number // empty')
+          if [ -n "$existing" ]; then
+            gh pr edit "$existing" \
+              --title "dagster: update to ${{ steps.check.outputs.version }}" \
+              --body "Automated update of dagster packages via \`uv lock --upgrade\`."
+          else
+            gh pr create \
+              --title "dagster: update to ${{ steps.check.outputs.version }}" \
+              --body "Automated update of dagster packages via \`uv lock --upgrade\`." \
+              --base main --head update/dagster \
+              --label dependencies --label automated
+          fi
+          pr_number=$(gh pr list --head update/dagster --json number --jq '.[0].number')
+          gh pr merge "$pr_number" --auto --squash || true
+
+  update-flake-inputs:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+    steps:
+      - name: Generate GitHub App Token
+        id: app-token
+        uses: actions/create-github-app-token@v2
+        with:
+          app-id: ${{ secrets.APP_ID }}
+          private-key: ${{ secrets.APP_PRIVATE_KEY }}
+      - uses: actions/checkout@v6
+        with:
+          token: ${{ steps.app-token.outputs.token }}
+      - uses: NixOS/nix-installer-action@main
+        with:
+          extra-conf: |
+            extra-substituters = https://nix-community.cachix.org https://cache.mulatta.io
+            extra-trusted-public-keys = nix-community.cachix.org-1:mB9FSh9qf2dCimDSUo8Zy7bkq5CX+/rkCWyvRCYg3Fs= cache.mulatta.io-1:DrV+Oy2azNyVKM7ihhD1QoOetRUnW+1G6RWToUpSO4U=
+      - name: Update flake inputs
+        run: nix flake update
+      - name: Check for changes
+        id: check
+        run: |
+          if git diff --quiet flake.lock; then
+            echo "updated=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "updated=true" >> "$GITHUB_OUTPUT"
+          fi
+      - name: Create pull request
+        if: steps.check.outputs.updated == 'true'
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add flake.lock
+          git checkout -b update/flake-inputs
+          git commit -m "flake.lock: update inputs" --signoff
+          git push --force origin update/flake-inputs
+          existing=$(gh pr list --head update/flake-inputs --json number --jq '.[0].number // empty')
+          if [ -n "$existing" ]; then
+            gh pr edit "$existing" \
+              --title "flake.lock: update inputs" \
+              --body "Automated update of flake inputs."
+          else
+            gh pr create \
+              --title "flake.lock: update inputs" \
+              --body "Automated update of flake inputs." \
+              --base main --head update/flake-inputs \
+              --label dependencies --label automated
+          fi
+          pr_number=$(gh pr list --head update/flake-inputs --json number --jq '.[0].number')
+          gh pr merge "$pr_number" --auto --squash || true
