@@ -35,12 +35,35 @@ let
   };
 
   codeServerNames = lib.mapAttrsToList (name: _: "dagster-code-${name}.service") cfg.codeServers;
+
+  # Extract major.minor from a version string (e.g. "1.12.18" -> "1.12")
+  majorMinor = v: lib.concatStringsSep "." (lib.take 2 (lib.splitString "." v));
+
+  infraVersion = cfg.package.dagsterVersion or null;
+
+  versionAssertions = lib.mapAttrsToList (
+    name: cs:
+    let
+      csVersion = cs.package.dagsterVersion or null;
+    in
+    {
+      assertion =
+        infraVersion == null || csVersion == null || majorMinor infraVersion == majorMinor csVersion;
+      message = "services.dagster.codeServers.${name}: dagster version mismatch — infrastructure has ${infraVersion} but code server has ${csVersion}. Major.minor versions must match.";
+    }
+  ) cfg.codeServers;
 in
 {
   imports = [ ./options.nix ];
 
   config = lib.mkIf cfg.enable {
-    assertions = ws.assertions ++ dy.assertions;
+    # Default webserver and code server packages to the top-level package
+    services.dagster.webserver.package = lib.mkDefault cfg.package;
+    services.dagster.codeServers = lib.mapAttrs (_name: _cs: {
+      package = lib.mkDefault cfg.package;
+    }) cfg.codeServers;
+
+    assertions = ws.assertions ++ dy.assertions ++ versionAssertions;
 
     users.users.dagster = {
       isSystemUser = true;
@@ -62,6 +85,7 @@ in
           description = "Dagster Webserver";
           after = [ "network.target" ] ++ codeServerNames;
           wantedBy = [ "multi-user.target" ];
+          restartTriggers = [ dy.configFile ];
           environment = commonEnvironment;
 
           serviceConfig = commonServiceConfig // {
@@ -85,6 +109,7 @@ in
           description = "Dagster Daemon";
           after = [ "network.target" ] ++ codeServerNames;
           wantedBy = [ "multi-user.target" ];
+          restartTriggers = [ dy.configFile ];
           environment = commonEnvironment;
 
           serviceConfig = commonServiceConfig // {

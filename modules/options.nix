@@ -1,13 +1,11 @@
-{ lib, pkgs, ... }:
+{ lib, ... }:
 {
   options.services.dagster = {
     enable = lib.mkEnableOption "Dagster orchestration platform";
 
     package = lib.mkOption {
       type = lib.types.package;
-      default = pkgs.python313Packages.dagster;
-      defaultText = lib.literalExpression "pkgs.python313Packages.dagster";
-      description = "The dagster package to use for daemon and code servers.";
+      description = "The dagster virtualenv package (provides dagster, dagster-daemon, dagster-webserver).";
     };
 
     workspaceDir = lib.mkOption {
@@ -108,9 +106,7 @@
 
       package = lib.mkOption {
         type = lib.types.package;
-        default = pkgs.python313Packages.dagster-webserver;
-        defaultText = lib.literalExpression "pkgs.python313Packages.dagster-webserver";
-        description = "The dagster-webserver package to use.";
+        description = "The dagster-webserver package to use. Defaults to the top-level dagster package.";
       };
 
       host = lib.mkOption {
@@ -214,9 +210,7 @@
           options = {
             package = lib.mkOption {
               type = lib.types.package;
-              default = pkgs.python313Packages.dagster;
-              defaultText = lib.literalExpression "pkgs.python313Packages.dagster";
-              description = "The dagster package to use for this code server.";
+              description = "The dagster package for this code server. Defaults to the top-level dagster package.";
             };
 
             host = lib.mkOption {

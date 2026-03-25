@@ -16,6 +16,11 @@ in
   imports = [ ./options.nix ];
 
   config = lib.mkIf cfg.enable {
+    services.dagster.webserver.package = lib.mkDefault cfg.package;
+    services.dagster.codeServers = lib.mapAttrs (_name: _cs: {
+      package = lib.mkDefault cfg.package;
+    }) cfg.codeServers;
+
     inherit (ws) assertions;
 
     launchd.daemons =
