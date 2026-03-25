@@ -3,7 +3,10 @@
     { pkgs, ... }:
     {
       devShells.default = pkgs.mkShell {
-        packages = [ pkgs.nix-update ];
+        packages = [
+          pkgs.uv
+        ];
+        env.UV_PYTHON_DOWNLOADS = "never";
       };
     };
 }
