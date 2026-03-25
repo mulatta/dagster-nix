@@ -1,75 +1,127 @@
 # dagster-nix
 
-Nix packages, overlay, and NixOS/Darwin modules for [Dagster](https://dagster.io/) 1.12.x.
+Nix package and NixOS/Darwin modules for [Dagster](https://dagster.io/).
 
-## Packages
+Python dependencies managed by [uv](https://docs.astral.sh/uv/) + [uv2nix](https://github.com/pyproject-nix/uv2nix).
 
-| Package | Description |
-|---------|-------------|
-| `dagster` | Orchestrator core + CLI + webserver |
-| `dagster-webserver` | Webserver only |
+## Quick Start
 
 ```bash
-# Run dagster dev server with a workspace
-nix run github:mulatta/dagster-nix#dagster -- dev -w workspace.yaml
+# Run dagster dev server
+nix run github:mulatta/dagster-nix -- dev -w workspace.yaml
 
-# Run webserver only
-nix run github:mulatta/dagster-nix#dagster-webserver -- -w workspace.yaml
+# Check version
+nix run github:mulatta/dagster-nix -- --version
 ```
 
-## Overlay
-
-Add dagster packages to your nixpkgs Python package set:
-
-```nix
-{
-  inputs.dagster-nix.url = "github:mulatta/dagster-nix";
-
-  outputs = { dagster-nix, nixpkgs, ... }:
-    let
-      pkgs = import nixpkgs {
-        system = "x86_64-linux";
-        overlays = [ dagster-nix.overlays.default ];
-      };
-    in {
-      # Now available as python packages
-      # pkgs.python313Packages.dagster
-      # pkgs.python313Packages.dagster-webserver
-      # pkgs.python313Packages.dagster-graphql
-      # pkgs.python313Packages.dagster-pipes
-      # pkgs.python313Packages.dagster-shared
-    };
-}
-```
+The `dagster` package is a single virtualenv containing `dagster`, `dagster-daemon`, `dagster-webserver`, `dagster-graphql`, `dagster-postgres`, and `dagster-duckdb`.
 
 ## NixOS Module
 
 ```nix
 {
-  imports = [ dagster-nix.nixosModules.default ];
+  inputs.dagster-nix.url = "github:mulatta/dagster-nix";
 
-  services.dagster = {
-    enable = true;
-    port = 3000;
+  outputs = { dagster-nix, nixpkgs, ... }: {
+    nixosConfigurations.myhost = nixpkgs.lib.nixosSystem {
+      modules = [
+        dagster-nix.nixosModules.default
+        {
+          services.dagster = {
+            enable = true;
 
-    # Option A: Load Python modules directly
-    workspace.pythonModules = [ "my_project.definitions" ];
+            # PostgreSQL storage (enabled by default)
+            # settings.storage.postgres.database = "dagster";
 
-    # Option B: Connect to remote code servers via gRPC
-    workspace.grpcServers = [
-      { host = "worker-1"; port = 4266; locationName = "etl"; }
-    ];
+            # Workspace: which code locations to load
+            workspace.pythonModules = [ "my_project.definitions" ];
 
-    # Option C: Provide your own workspace.yaml
-    # workspaceFile = ./workspace.yaml;
+            # Or connect to remote code servers
+            # workspace.grpcServers = [
+            #   { host = "worker-1"; port = 4266; locationName = "etl"; }
+            # ];
 
-    # Optional: Run code servers on the same machine
-    codeServers.etl = {
-      module = "my_etl.definitions";
-      port = 4266;
+            # Run code servers on the same machine
+            codeServers.etl = {
+              module = "my_etl.definitions";
+              port = 4266;
+            };
+          };
+
+          # PostgreSQL setup (module does NOT create this automatically)
+          services.postgresql = {
+            enable = true;
+            ensureDatabases = [ "dagster" ];
+            ensureUsers = [{ name = "dagster"; ensureDBOwnership = true; }];
+          };
+        }
+      ];
     };
   };
 }
+```
+
+### Services
+
+`enable = true` starts both **webserver** and **daemon** by default:
+
+| Service | Default | Description |
+|---------|---------|-------------|
+| `webserver` | enabled | UI + GraphQL API (port 3000) |
+| `daemon` | enabled | Schedules, sensors, backfills |
+| `codeServers.*` | per entry | gRPC code location servers |
+
+Disable components for worker-only nodes:
+
+```nix
+services.dagster = {
+  enable = true;
+  webserver.enable = false;
+  daemon.enable = false;
+  codeServers.ml = {
+    module = "ml_pipeline.definitions";
+    port = 4267;
+  };
+};
+```
+
+### Settings
+
+dagster.yaml is generated from `settings` or provided directly via `settingsFile`:
+
+```nix
+services.dagster = {
+  # Option A: Declarative (default)
+  settings = {
+    storage.postgres = {
+      host = "/run/postgresql";
+      database = "dagster";
+      user = "dagster";
+    };
+    telemetry.enabled = false;
+    extraConfig = {
+      # Arbitrary dagster.yaml keys
+      compute_logs.module = "dagster.core.storage.noop_compute_log_manager";
+    };
+  };
+
+  # Option B: Bring your own
+  # settingsFile = ./dagster.yaml;
+
+  # Secrets via environment file (sops-nix, agenix, etc.)
+  # environmentFile = config.sops.secrets.dagster-env.path;
+};
+```
+
+### Custom Package
+
+Override the dagster package (e.g. from a pipeline repo using uv2nix):
+
+```nix
+services.dagster = {
+  package = my-pipeline-venv;  # must include dagster + dagster-webserver
+  codeServers.etl.package = my-pipeline-venv;  # code server can use same or different venv
+};
 ```
 
 ## Darwin Module
@@ -85,16 +137,15 @@ Add dagster packages to your nixpkgs Python package set:
 }
 ```
 
-## Test Workspaces
-
-Example workspaces for testing:
+## Development
 
 ```bash
-# Minimal hello asset
-DAGSTER_HOME=/tmp/dagster-hello \
-  nix run .#dagster -- dev -w tests/hello/workspace.yaml
+# Update Python dependencies
+nix develop -c uv lock --upgrade
 
-# OpenAlex API example (fetches top neuroscience papers)
-DAGSTER_HOME=/tmp/dagster-openalex \
-  nix run .#dagster -- dev -w tests/openalex/workspace.yaml
+# Build
+nix build
+
+# Run tests
+nix run .#dagster -- dev -w tests/hello/workspace.yaml
 ```
