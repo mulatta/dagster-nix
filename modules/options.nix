@@ -248,6 +248,23 @@
               description = "Maximum number of threaded workers.";
             };
 
+            environment = lib.mkOption {
+              type = lib.types.attrsOf lib.types.str;
+              default = { };
+              description = ''
+                Extra environment variables for this code server.
+                Useful for LD_LIBRARY_PATH (GPU/CUDA), CUDA_VISIBLE_DEVICES, etc.
+              '';
+              example = lib.literalExpression ''
+                {
+                  LD_LIBRARY_PATH = lib.makeLibraryPath [
+                    "''${pkgs.addDriverRunpath.driverLink}/lib"
+                    pkgs.stdenv.cc.cc.lib
+                  ];
+                }
+              '';
+            };
+
             extraArgs = lib.mkOption {
               type = lib.types.listOf lib.types.str;
               default = [ ];

@@ -131,7 +131,7 @@ in
           description = "Dagster Code Server (${name})";
           after = [ "network.target" ];
           wantedBy = [ "multi-user.target" ];
-          environment = commonEnvironment;
+          environment = commonEnvironment // cs.environment;
 
           serviceConfig = commonServiceConfig // {
             ExecStart = lib.concatStringsSep " " (ws.codeServerArgs name cs);
