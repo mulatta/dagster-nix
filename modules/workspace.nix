@@ -27,13 +27,13 @@ let
   hasWorkspace = cfg.workspace != null;
   hasWorkspaceFile = cfg.workspaceFile != null;
   needsWorkspace = cfg.webserver.enable || cfg.daemon.enable;
-in
-{
+
   codeServerAssertions = lib.mapAttrsToList (name: cs: {
     assertion = (cs.module != null) != (cs.pythonFile != null);
     message = "services.dagster.codeServers.${name}: exactly one of module or pythonFile must be set.";
   }) cfg.codeServers;
-
+in
+{
   assertions = [
     {
       assertion = !(hasWorkspace && hasWorkspaceFile);
@@ -74,7 +74,7 @@ in
   codeServerArgs =
     name: cs:
     [
-      (lib.getExe cs.package)
+      (lib.getExe' cs.package "dagster")
       "code-server"
       "start"
       "--host"

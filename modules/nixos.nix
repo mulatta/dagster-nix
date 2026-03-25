@@ -57,11 +57,8 @@ in
   imports = [ ./options.nix ];
 
   config = lib.mkIf cfg.enable {
-    # Default webserver and code server packages to the top-level package
+    # Default webserver package to the top-level package
     services.dagster.webserver.package = lib.mkDefault cfg.package;
-    services.dagster.codeServers = lib.mapAttrs (_name: _cs: {
-      package = lib.mkDefault cfg.package;
-    }) cfg.codeServers;
 
     assertions =
       ws.assertions
@@ -113,7 +110,7 @@ in
           serviceConfig = commonServiceConfig // {
             ExecStart = lib.concatStringsSep " " (
               [
-                (lib.getExe cfg.webserver.package)
+                (lib.getExe' cfg.webserver.package "dagster-webserver")
                 "--host"
                 cfg.webserver.host
                 "--port"

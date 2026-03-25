@@ -21,9 +21,6 @@ in
 
   config = lib.mkIf cfg.enable {
     services.dagster.webserver.package = lib.mkDefault cfg.package;
-    services.dagster.codeServers = lib.mapAttrs (_name: _cs: {
-      package = lib.mkDefault cfg.package;
-    }) cfg.codeServers;
 
     assertions = ws.assertions ++ dy.assertions;
 
@@ -48,7 +45,7 @@ in
           serviceConfig = {
             Label = "com.dagster.webserver";
             ProgramArguments = [
-              (lib.getExe cfg.webserver.package)
+              (lib.getExe' cfg.webserver.package "dagster-webserver")
               "--host"
               cfg.webserver.host
               "--port"
